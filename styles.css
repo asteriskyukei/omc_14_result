@@ -498,8 +498,19 @@ button { color: inherit; }
 .judge-entry:nth-child(even) { background: #14202c; }
 
 .judge-entry.excluded {
-  border-color: rgba(239,161,161,.30);
-  background: linear-gradient(90deg, var(--red-soft), transparent 36%), #111a25;
+  border-color: #394653;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(125, 138, 151, .08),
+      transparent 42%
+    ),
+    #111820;
+}
+
+.judge-entry.excluded .criterion-strip,
+.judge-entry.excluded .judge-comment {
+  opacity: .82;
 }
 
 .judge-row {
