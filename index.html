@@ -5,17 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="심사 결과 공개 페이지">
   <title>Judging Results</title>
-
-  <script>
-    window.MathJax = {
-      tex: {
-        inlineMath: [['\\(', '\\)']],
-        displayMath: [['\\[', '\\]']]
-      },
-      svg: { fontCache: 'global' }
-    };
-  </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -33,11 +22,13 @@
             <span class="filter-label">GROUP</span>
             <div id="groupFilters" class="segmented"></div>
           </div>
-          <div class="filter-row judge-filter-row">
+
+          <div class="filter-row">
             <span class="filter-label">RANKING</span>
-            <div id="judgeFilters" class="segmented judge-segmented"></div>
+            <div id="judgeFilters" class="segmented"></div>
           </div>
         </div>
+
         <label class="search">
           <span class="sr-only">참가자 검색</span>
           <input id="searchInput" type="search" placeholder="참가자 검색" autocomplete="off">
@@ -45,9 +36,18 @@
       </section>
 
       <section class="summary-grid">
-        <article class="summary-card"><span>Participants</span><strong id="participantCount">-</strong></article>
-        <article class="summary-card"><span>Judges</span><strong id="judgeCount">7</strong></article>
-        <article class="summary-card"><span>Scoring</span><strong>Z-Score</strong></article>
+        <article class="summary-card summary-card--participants">
+          <span>Participants</span>
+          <strong id="participantCount">-</strong>
+        </article>
+        <article class="summary-card summary-card--judges">
+          <span>Judges</span>
+          <strong id="judgeCount">7</strong>
+        </article>
+        <article class="summary-card summary-card--scoring">
+          <span>Scoring</span>
+          <strong>Z-Score</strong>
+        </article>
       </section>
 
       <section class="results-section">
@@ -67,50 +67,39 @@
                 <th><button class="sort-button" type="button" data-sort="no">No. <span class="sort-indicator"></span></button></th>
                 <th><button class="sort-button" type="button" data-sort="username">Participant <span class="sort-indicator"></span></button></th>
                 <th><button class="sort-button" type="button" data-sort="track">Track <span class="sort-indicator"></span></button></th>
-                <th><button id="scoreHeader" class="sort-button" type="button" data-sort="score">Final Score <span class="sort-indicator"></span></button></th>
+                <th><button class="sort-button" type="button" data-sort="score"><span id="scoreHeaderLabel">Final Score</span> <span class="sort-indicator"></span></button></th>
               </tr>
             </thead>
             <tbody id="resultsBody"></tbody>
           </table>
         </div>
+
         <div id="emptyState" class="empty-state" hidden>표시할 결과가 없습니다.</div>
       </section>
 
       <section class="method-section">
-        <p class="section-kicker">SCORING METHOD</p>
-        <h2>평가 방식</h2>
+        <div>
+          <p class="section-kicker">SCORING METHOD</p>
+          <h2>평가 방식</h2>
+        </div>
+
         <div class="method-grid">
           <article>
             <h3>Raw Score</h3>
-            <div class="formula-display">
-              \[
-              R = B_{20} + T_{30} + C_{25} + I_{25}
-              \]
-            </div>
-            <p>각 심사위원의 원점수는 100점 만점입니다.</p>
+            <p>Basic Skill (20) + Technical Skill (30) + Creativity (25) + Judge's impression (25)</p>
+            <code>Raw Score = 100 points maximum</code>
           </article>
 
           <article>
             <h3>Standardization</h3>
-            <div class="formula-display">
-              \[
-              z_{ij} = \frac{R_{ij} - \mu_j}{\sigma_j}
-              \]
-            </div>
-            <p>심사위원 \(j\)의 점수 분포를 기준으로 참가자 \(i\)의 원점수를 표준화합니다.</p>
+            <p>각 심사위원의 점수 분포를 기준으로 참가자의 원점수를 독립적으로 표준화합니다.</p>
+            <code>Z-Score = (Raw Score - Judge Mean) / Judge Standard Deviation</code>
           </article>
 
           <article>
             <h3>Final Score</h3>
-            <div class="formula-display">
-              \[
-              F_i =
-              \sum_{j=1}^{7} z_{ij}
-              - \max_j(z_{ij})
-              - \min_j(z_{ij})
-              \]
-            </div>
-            <p>7개 Z-Score 중 최고 1개와 최저 1개를 제외한 5개 점수의 합입니다.</p>
+            <p>7명의 Z-Score 중 최고점 1개와 최저점 1개를 제외하고 나머지 5개를 합산합니다.</p>
+            <code>Final Score = Sum of 7 Z-Scores - Highest Z - Lowest Z</code>
           </article>
         </div>
       </section>
