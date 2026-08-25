@@ -347,11 +347,17 @@ function showDetail(p, rank, selectedJudgeIndex = null) {
             <strong>${escapeHtml(j.name)}</strong>
             ${
               j.excluded
-                ? `<span class="excluded-badge">${
+                ? `<span class="excluded-badge ${
                     j.excludedReason === "highest"
-                      ? "Highest · Excluded"
-                      : "Lowest · Excluded"
-                  }</span>`
+                      ? "excluded-highest"
+                      : "excluded-lowest"
+                  }">
+                    ${
+                      j.excludedReason === "highest"
+                        ? "Highest · Excluded"
+                        : "Lowest · Excluded"
+                    }
+                  </span>
                 : ""
             }
           </div>
