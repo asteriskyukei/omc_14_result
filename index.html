@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="심사 결과 공개 페이지">
+  <title>Judging Results</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero__eyebrow">OFFICIAL RESULTS</div>
+      <h1 id="eventTitle">Judging Results</h1>
+      <p id="eventSubtitle" class="hero__subtitle">심사 결과를 불러오는 중입니다.</p>
+    </header>
+
+    <main>
+      <section class="toolbar" aria-label="결과 필터">
+        <div id="groupFilters" class="segmented"></div>
+        <label class="search">
+          <span class="sr-only">참가자 검색</span>
+          <input id="searchInput" type="search" placeholder="참가자 검색" autocomplete="off">
+        </label>
+      </section>
+
+      <section class="summary-grid">
+        <article class="summary-card"><span>Participants</span><strong id="participantCount">-</strong></article>
+        <article class="summary-card"><span>Judges</span><strong id="judgeCount">7</strong></article>
+        <article class="summary-card"><span>Scoring</span><strong>Z-Score</strong></article>
+      </section>
+
+      <section class="results-section">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">RANKING</p>
+            <h2 id="rankingTitle">Final Results</h2>
+          </div>
+          <p id="updatedAt" class="updated-at"></p>
+        </div>
+
+        <div class="table-wrap">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>No.</th>
+                <th>Participant</th>
+                <th>Track</th>
+                <th>Final Score</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+        <div id="emptyState" class="empty-state" hidden>표시할 결과가 없습니다.</div>
+      </section>
+
+      <section class="method-section">
+        <p class="section-kicker">SCORING METHOD</p>
+        <h2>평가 방식</h2>
+        <div class="method-grid">
+          <article>
+            <h3>Raw Score</h3>
+            <p>Basic Skill 20 + Technical Skill 30 + Creativity 25 + Judge's impression 25 = 100점</p>
+          </article>
+          <article>
+            <h3>Standardization</h3>
+            <p>각 심사위원 점수는 동일 그룹 참가자 기준으로 독립 표준화합니다.</p>
+            <code>z = (raw score - judge average) / judge standard deviation</code>
+          </article>
+          <article>
+            <h3>Final Score</h3>
+            <p>7명의 심사위원별 표준화 점수 중 최고점 1개와 최저점 1개를 제외하고, 나머지 5개 점수를 합산하여 Final Score를 계산합니다.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="detailDialog" class="detail-dialog">
+    <button id="dialogClose" class="dialog-close" type="button" aria-label="닫기">×</button>
+    <div id="detailContent"></div>
+  </dialog>
+
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+    <p>결과를 불러오는 중입니다.</p>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
