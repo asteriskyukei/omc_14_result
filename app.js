@@ -357,7 +357,7 @@ function showDetail(p, rank, selectedJudgeIndex = null) {
                         ? "Highest · Excluded"
                         : "Lowest · Excluded"
                     }
-                  </span>
+                  </span>`
                 : ""
             }
           </div>
