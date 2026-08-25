@@ -98,3 +98,134 @@ button,input{font:inherit}
   text-decoration: none;
   vertical-align: middle;
 }
+\n\n/* v4: modal scrollbar + per-judge criterion scores */\n.detail-dialog {\n  overflow: hidden;\n}\n\n.detail-dialog #detailContent {\n  max-height: 86vh;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  scrollbar-width: thin;\n  scrollbar-color: #5b6470 transparent;\n}\n\n.detail-dialog #detailContent::-webkit-scrollbar {\n  width: 9px;\n}\n\n.detail-dialog #detailContent::-webkit-scrollbar-track {\n  background: transparent;\n  margin: 18px 0;\n}\n\n.detail-dialog #detailContent::-webkit-scrollbar-thumb {\n  background: linear-gradient(180deg, #69727f, #444b55);\n  border: 2px solid var(--panel);\n  border-radius: 999px;\n}\n\n.detail-dialog #detailContent::-webkit-scrollbar-thumb:hover {\n  background: linear-gradient(180deg, #8993a1, #5d6672);\n}\n\n.dialog-close {\n  position: absolute;\n  top: 0;\n  right: 0;\n  z-index: 5;\n}\n\n.judge-criteria {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 8px;\n  padding: 0 16px 14px;\n}\n\n.judge-criterion {\n  padding: 11px 12px;\n  border: 1px solid var(--line);\n  border-radius: 10px;\n  background: rgba(0, 0, 0, .13);\n}\n\n.judge-criterion span {\n  display: block;\n  min-height: 30px;\n  color: var(--muted);\n  font-size: 11px;\n  line-height: 1.35;\n}\n\n.judge-criterion strong {\n  display: block;\n  margin-top: 7px;\n  font-size: 16px;\n  font-variant-numeric: tabular-nums;\n}\n\n.judge-criterion small {\n  color: var(--muted);\n  font-size: 11px;\n  font-weight: 600;\n}\n\n/* 제외 상태는 카드 전체를 흐리되 내용 가독성은 유지 */\n.judge-entry.excluded .judge-row {\n  text-decoration: none;\n}\n\n@media(max-width:760px) {\n  .judge-criteria {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n}\n
+
+/* v5: 그룹 필터 아래 심사위원별 랭킹 필터 */
+.filter-stack {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.filter-label {
+  flex: 0 0 64px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.judge-segmented {
+  min-width: 0;
+}
+
+.judge-segmented button {
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.judge-ranking-score {
+  font-size: 15px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.judge-ranking-score small,
+.detail-score small {
+  color: var(--muted);
+  font-size: .55em;
+  font-weight: 700;
+}
+
+@media(max-width:760px) {
+  .filter-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .filter-label {
+    flex: none;
+  }
+
+  .judge-segmented {
+    overflow-x: auto;
+    width: 100%;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #4a515c transparent;
+  }
+
+  .judge-segmented button {
+    flex: 0 0 auto;
+  }
+}
+
+
+/* v6 - sortable table */
+.results-table th {
+  padding: 0;
+}
+
+.sort-button {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 20px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-align: left;
+  text-transform: uppercase;
+  transition:
+    color .15s ease,
+    background .15s ease;
+}
+
+.sort-button:hover,
+.sort-button.active {
+  color: var(--text);
+  background: rgba(255,255,255,.025);
+}
+
+.sort-indicator {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  color: #68717e;
+  font-size: 11px;
+}
+
+.sort-button.active .sort-indicator {
+  color: var(--text);
+}
+
+.formula-display {
+  overflow-x: auto;
+  margin: 10px 0 12px;
+  padding: 8px 0 4px;
+  color: var(--text);
+}
+
+.formula-display mjx-container {
+  margin: .5em 0 !important;
+  font-size: 112% !important;
+}
+
+.method-grid article {
+  overflow: hidden;
+}
