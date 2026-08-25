@@ -655,6 +655,18 @@ button { color: inherit; }
   animation: spin .8s linear infinite;
 }
 
+.excluded-badge.excluded-highest {
+  color: var(--red);
+  border-color: rgba(239, 161, 161, .34);
+  background: rgba(239, 161, 161, .06);
+}
+
+.excluded-badge.excluded-lowest {
+  color: #74c7f5;
+  border-color: rgba(116, 199, 245, .34);
+  background: rgba(116, 199, 245, .08);
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .fatal {
