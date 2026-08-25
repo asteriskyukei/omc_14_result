@@ -61,7 +61,7 @@ button { color: inherit; }
 .hero h1 {
   margin: 0;
   max-width: 920px;
-  font-size: clamp(44px, 8vw, 88px);
+  font-size: clamp(33px, 6vw, 66px);
   line-height: .96;
   letter-spacing: -.055em;
 }
