@@ -142,7 +142,7 @@ function renderAllTimeMode() {
   $("summaryValue2").textContent = state.payload.rounds.filter(r => r.enabled).length;
 
   $("summaryLabel3").textContent = "Ranking";
-  $("summaryValue3").textContent = "Wins";
+  $("summaryValue3").textContent = "Group Wins";
 
   $("rankingTitle").textContent = "All-Time Standings";
   renderAllTimeTable();
@@ -523,12 +523,12 @@ function renderAllTimeTable() {
     <tr>
       ${sortableTh("Rank", "rank")}
       ${sortableTh("Participant", "username")}
-      ${sortableTh("Wins", "wins")}
-      ${sortableTh("2nd", "seconds")}
-      ${sortableTh("3rd", "thirds")}
+      ${sortableTh("Group Wins", "wins")}
+      ${sortableTh("Group 2nd", "seconds")}
+      ${sortableTh("Group 3rd", "thirds")}
       ${sortableTh("Podiums", "podiums")}
       ${sortableTh("Appearances", "appearances")}
-      ${sortableTh("Avg Rank", "averageRank")}
+      ${sortableTh("Avg Group Rank", "averageRank")}
     </tr>
   `;
 
@@ -736,7 +736,8 @@ function renderScoringMethod() {
     $("methodHeading").textContent = "전회차 종합 순위 기준";
 
     grid.innerHTML = `
-      ${methodCard("Primary", "1위 횟수가 많은 참가자를 우선합니다.", "Wins: descending")}
+      ${methodCard("Rank Source", "모든 회차에서 참가자가 속한 그룹 내 순위를 사용합니다.", "Group Rank only")}
+      ${methodCard("Primary", "그룹 1위 횟수가 많은 참가자를 우선합니다.", "Group Wins: descending")}
       ${methodCard("Tie-break", "1위 횟수가 같으면 2위 횟수 → 3위 횟수 → 포디움 횟수 순으로 비교합니다.", "2nd → 3rd → Podiums")}
       ${methodCard("Final Tie-break", "여전히 같으면 평균 순위가 더 높은 참가자를 우선합니다.", "Average Rank: ascending")}
     `;
@@ -1054,16 +1055,16 @@ function showAllTimeDetail(p) {
           <p class="detail-sub">${escapeHtml(p.participantId)}</p>
         </div>
 
-        <div class="detail-score">${p.wins}<small> Wins</small></div>
+        <div class="detail-score">${p.wins}<small> Group Wins</small></div>
       </div>
 
       <div class="alltime-stats">
-        ${statCard("Wins", p.wins)}
-        ${statCard("2nd", p.seconds)}
-        ${statCard("3rd", p.thirds)}
+        ${statCard("Group Wins", p.wins)}
+        ${statCard("Group 2nd", p.seconds)}
+        ${statCard("Group 3rd", p.thirds)}
         ${statCard("Podiums", p.podiums)}
         ${statCard("Appearances", p.appearances)}
-        ${statCard("Avg Rank", number(p.averageRank, 2))}
+        ${statCard("Avg Group Rank", number(p.averageRank, 2))}
       </div>
 
       <p class="section-kicker judge-section-title">ROUND HISTORY</p>
