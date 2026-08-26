@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbyYc0K5wGzqo1hql5ui_dV03I32cG77y5i9_XJm-kKXczTEJuOVPyobSmAcfml7TRP-dg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbw3BkusBf7L2AypiXyiZPKy5XVebiPSmVKk6o74aGf9HVCzb4bEMSQyPgnpv-PebJG__w/exec";
 
 const state = {
   payload: null,
