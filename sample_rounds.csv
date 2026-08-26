@@ -1,0 +1,3 @@
+Round,Label,Enabled,JudgeCount,ScoreInputMode,BaseScore,UseStandardization,StdDev,TrimHighest,TrimLowest,Aggregation,AllTimeRankSource,BasicMax,TechnicalMax,CreativityMax,ImpressionMax,Judge1,Judge2,Judge3,Judge4,Judge5,Judge6,Judge7,Notes
+14,14회,TRUE,7,CRITERIA,0,TRUE,POPULATION,1,1,SUM,OVERALL,20,30,25,25,Judge 1,Judge 2,Judge 3,Judge 4,Judge 5,Judge 6,Judge 7,14회 현재 공식
+13,13회,FALSE,7,BONUS_PENALTY,75,FALSE,POPULATION,0,0,SUM,OVERALL,0,0,0,0,Judge 1,Judge 2,Judge 3,Judge 4,Judge 5,Judge 6,Judge 7,13회 전용 Base+Plus-Minus Raw 입력

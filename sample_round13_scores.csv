@@ -1,0 +1,3 @@
+Round,ParticipantID,Group,No,Username,Track,Published,J1_Bonus,J1_Penalty,J1_Raw,J2_Bonus,J2_Penalty,J2_Raw
+13,user001,Master,1,Alice,Track A,TRUE,32,8,99,25,5,95
+13,user002,Master,2,Bob,Track B,TRUE,20,-3,92,18,4,89

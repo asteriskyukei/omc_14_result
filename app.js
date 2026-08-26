@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbxCtJTlknz0RqldWKuSitftN-x2V3gLHR6CXuEnW0t3qtOhgP5KOs_E8p4I0nNch9h3Lw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzrNcbunZpNn5Ewpu7_FcWhC-W1Ww7GI2NL8-sZxSxeF44_2BwbiIREchA_IcZaTaEAqw/exec";
 
 const state = {
   payload: null,
@@ -643,8 +643,9 @@ function renderSubcategoryAwards() {
   grid.innerHTML = roundMeta.subcategories
     .map(category => {
       const ranking = participants
-        .map(p => ({
+        .map((p, sourceIndex) => ({
           participant: p,
+          sourceIndex,
           score: p.subcategories
             ? Number(p.subcategories[category.key])
             : NaN
@@ -652,11 +653,9 @@ function renderSubcategoryAwards() {
         .filter(item => Number.isFinite(item.score))
         .sort((a, b) => {
           if (b.score !== a.score) return b.score - a.score;
-          return String(a.participant.no || "").localeCompare(
-            String(b.participant.no || ""),
-            undefined,
-            { numeric: true }
-          );
+          // The original sheet uses MATCH(rank, range, 0), so a tied score
+          // resolves to the participant appearing first in sheet order.
+          return a.sourceIndex - b.sourceIndex;
         });
 
       if (!ranking.length) {
@@ -672,9 +671,7 @@ function renderSubcategoryAwards() {
       }
 
       const topScore = ranking[0].score;
-      const winners = ranking.filter(
-        item => Math.abs(item.score - topScore) < 1e-12
-      );
+      const winners = [ranking[0]];
 
       return `
         <article class="award-card">
@@ -700,17 +697,21 @@ function renderSubcategoryAwards() {
 
 function renderAwardPlaces(ranking) {
   const rows = [];
+  const seenRanks = new Set();
   let previousScore = null;
-  let previousRank = 0;
+  let denseRank = 0;
 
-  ranking.forEach((item, index) => {
-    const same =
-      previousScore !== null &&
-      Math.abs(item.score - previousScore) < 1e-12;
+  ranking.forEach(item => {
+    if (
+      previousScore === null ||
+      Math.abs(item.score - previousScore) >= 1e-12
+    ) {
+      denseRank++;
+    }
 
-    const rank = same ? previousRank : index + 1;
+    const rank = denseRank;
 
-    if (rank <= 3) {
+    if (rank <= 3 && !seenRanks.has(rank)) {
       rows.push(`
         <div class="award-place">
           <span>#${rank}</span>
@@ -718,10 +719,10 @@ function renderAwardPlaces(ranking) {
           <em>${number(item.score, 2)}</em>
         </div>
       `);
+      seenRanks.add(rank);
     }
 
     previousScore = item.score;
-    previousRank = rank;
   });
 
   return rows.join("");
