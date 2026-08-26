@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbw3BkusBf7L2AypiXyiZPKy5XVebiPSmVKk6o74aGf9HVCzb4bEMSQyPgnpv-PebJG__w/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxr8Y_47Vj8Z5tU9zl2VzF7n_uIJTq9hiFw16U0Mv4UEbQ6LMKlHR6wmQUF3pd0HSDb5g/exec";
 
 const state = {
   payload: null,
@@ -125,9 +125,11 @@ function renderRoundMode() {
   renderGroups();
   renderJudgeFilters();
   renderRoundTable();
+  renderSubcategoryAwards();
 }
 
 function renderAllTimeMode() {
+  $("subcategorySection").hidden = true;
   $("groupFilterRow").hidden = true;
   $("judgeFilterRow").hidden = true;
 
@@ -164,6 +166,7 @@ function renderGroups() {
       state.sortDir = "asc";
       renderGroups();
       renderRoundTable();
+      renderSubcategoryAwards();
     };
 
     container.appendChild(button);
@@ -211,52 +214,85 @@ function getFilteredRoundEntries() {
   return entries;
 }
 
-function buildJudgeRanking(participants, judgeIndex, useStandardization) {
-  const available = participants.filter(
-    p => p.judges[judgeIndex] && p.judges[judgeIndex].available
-  );
-
-  const sorted = [...available].sort((a, b) => {
-    const aJudge = a.judges[judgeIndex];
-    const bJudge = b.judges[judgeIndex];
-
-    const aScore = useStandardization
-      ? Number(aJudge.zScore)
-      : Number(aJudge.rawScore);
-
-    const bScore = useStandardization
-      ? Number(bJudge.zScore)
-      : Number(bJudge.rawScore);
-
-    if (bScore !== aScore) return bScore - aScore;
-
-    return String(a.no || "").localeCompare(
-      String(b.no || ""),
-      undefined,
-      { numeric: true }
-    );
-  });
-
+function buildJudgeRanking(
+  participants,
+  judgeIndex,
+  useStandardization,
+  rankingScope
+) {
   const rankMap = new Map();
-  let previousScore = null;
-  let previousRank = 0;
 
-  sorted.forEach((p, index) => {
-    const judge = p.judges[judgeIndex];
-    const score = useStandardization
-      ? Number(judge.zScore)
-      : Number(judge.rawScore);
+  function rankOneSet(items) {
+    const available = items.filter(
+      p => p.judges[judgeIndex] && p.judges[judgeIndex].available
+    );
 
-    const sameScore =
-      previousScore !== null &&
-      Math.abs(score - previousScore) < 1e-12;
+    const sorted = [...available].sort((a, b) => {
+      const aJudge = a.judges[judgeIndex];
+      const bJudge = b.judges[judgeIndex];
 
-    const rank = sameScore ? previousRank : index + 1;
-    rankMap.set(p, rank);
+      const aScore = useStandardization
+        ? Number(aJudge.zScore)
+        : Number(aJudge.rawScore);
 
-    previousScore = score;
-    previousRank = rank;
-  });
+      const bScore = useStandardization
+        ? Number(bJudge.zScore)
+        : Number(bJudge.rawScore);
+
+      if (bScore !== aScore) return bScore - aScore;
+
+      return String(a.no || "").localeCompare(
+        String(b.no || ""),
+        undefined,
+        { numeric: true }
+      );
+    });
+
+    let previousScore = null;
+    let previousRank = 0;
+
+    sorted.forEach((p, index) => {
+      const judge = p.judges[judgeIndex];
+
+      const score = useStandardization
+        ? Number(judge.zScore)
+        : Number(judge.rawScore);
+
+      const sameScore =
+        previousScore !== null &&
+        Math.abs(score - previousScore) < 1e-12;
+
+      const rank = sameScore
+        ? previousRank
+        : index + 1;
+
+      rankMap.set(p, rank);
+
+      previousScore = score;
+      previousRank = rank;
+    });
+  }
+
+  if (
+    rankingScope === "GROUP" &&
+    state.group === "ALL"
+  ) {
+    const groups = new Map();
+
+    participants.forEach(p => {
+      const key = p.group || "__ALL__";
+
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+
+      groups.get(key).push(p);
+    });
+
+    groups.forEach(items => rankOneSet(items));
+  } else {
+    rankOneSet(participants);
+  }
 
   return rankMap;
 }
@@ -270,7 +306,12 @@ function renderRoundTable() {
   const judgeIndex = isJudgeRanking ? Number(state.judge) : null;
 
   const judgeRankMap = isJudgeRanking
-    ? buildJudgeRanking(participants, judgeIndex, roundMeta.useStandardization)
+    ? buildJudgeRanking(
+        participants,
+        judgeIndex,
+        roundMeta.useStandardization,
+        roundMeta.rankingScope
+      )
     : null;
 
   if (isJudgeRanking) {
@@ -295,7 +336,13 @@ function renderRoundTable() {
   $("summaryValue2").textContent = roundMeta.judgeCount;
 
   $("summaryLabel3").textContent = "Scoring";
-  $("summaryValue3").textContent = roundMeta.useStandardization ? "Z-Score" : "Raw";
+  $("summaryValue3").textContent = roundMeta.useStandardization
+    ? (
+        roundMeta.standardizationScope === "GROUP"
+          ? "Group Z"
+          : "Z-Score"
+      )
+    : "Raw";
 
   const roundLabel = roundMeta.label || `${roundMeta.round}회`;
 
@@ -305,7 +352,11 @@ function renderRoundTable() {
   } else {
     $("rankingTitle").textContent =
       state.group === "ALL"
-        ? `${roundLabel} Final Results`
+        ? (
+            roundMeta.rankingScope === "GROUP"
+              ? `${roundLabel} Group Results`
+              : `${roundLabel} Final Results`
+          )
         : `${roundLabel} · ${state.group} Results`;
   }
 
@@ -314,7 +365,12 @@ function renderRoundTable() {
   const getRank = p =>
     isJudgeRanking
       ? judgeRankMap.get(p)
-      : (state.group === "ALL" ? p.overallRank : p.groupRank);
+      : (
+          state.group === "ALL" &&
+          roundMeta.rankingScope !== "GROUP"
+            ? p.overallRank
+            : p.groupRank
+        );
 
   const getScore = p => {
     if (!isJudgeRanking) return Number(p.finalScore);
@@ -552,6 +608,118 @@ function updateSortIndicators() {
   });
 }
 
+function renderSubcategoryAwards() {
+  const section = $("subcategorySection");
+  const roundMeta = getRoundMeta();
+
+  if (
+    !roundMeta ||
+    !roundMeta.enableSubcategories ||
+    !roundMeta.subcategories ||
+    !roundMeta.subcategories.length
+  ) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+
+  const participants = getFilteredRoundEntries();
+  const grid = $("subcategoryGrid");
+  const aggregation = roundMeta.subcategoryAggregation || "AVERAGE";
+
+  $("subcategoryMethod").textContent =
+    aggregation === "SUM"
+      ? "Judge scores summed · Final Score와 별도"
+      : "Judge scores averaged · Final Score와 별도";
+
+  grid.innerHTML = roundMeta.subcategories
+    .map(category => {
+      const ranking = participants
+        .map(p => ({
+          participant: p,
+          score: p.subcategories
+            ? Number(p.subcategories[category.key])
+            : NaN
+        }))
+        .filter(item => Number.isFinite(item.score))
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return String(a.participant.no || "").localeCompare(
+            String(b.participant.no || ""),
+            undefined,
+            { numeric: true }
+          );
+        });
+
+      if (!ranking.length) {
+        return `
+          <article class="award-card">
+            <div class="award-card__header">
+              <span>SUBCATEGORY</span>
+              <h3>${escapeHtml(category.label)}</h3>
+            </div>
+            <div class="award-empty">점수 데이터 없음</div>
+          </article>
+        `;
+      }
+
+      const topScore = ranking[0].score;
+      const winners = ranking.filter(
+        item => Math.abs(item.score - topScore) < 1e-12
+      );
+
+      return `
+        <article class="award-card">
+          <div class="award-card__header">
+            <span>SUBCATEGORY</span>
+            <h3>${escapeHtml(category.label)}</h3>
+          </div>
+
+          <div class="award-winner">
+            <span>WINNER${winners.length > 1 ? "S" : ""}</span>
+            <strong>${winners.map(item => escapeHtml(item.participant.username)).join(" · ")}</strong>
+            <em>${number(topScore, 2)}</em>
+          </div>
+
+          <div class="award-ranking">
+            ${renderAwardPlaces(ranking)}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderAwardPlaces(ranking) {
+  const rows = [];
+  let previousScore = null;
+  let previousRank = 0;
+
+  ranking.forEach((item, index) => {
+    const same =
+      previousScore !== null &&
+      Math.abs(item.score - previousScore) < 1e-12;
+
+    const rank = same ? previousRank : index + 1;
+
+    if (rank <= 3) {
+      rows.push(`
+        <div class="award-place">
+          <span>#${rank}</span>
+          <strong>${escapeHtml(item.participant.username)}</strong>
+          <em>${number(item.score, 2)}</em>
+        </div>
+      `);
+    }
+
+    previousScore = item.score;
+    previousRank = rank;
+  });
+
+  return rows.join("");
+}
+
 function renderScoringMethod() {
   const grid = $("methodGrid");
   grid.innerHTML = "";
@@ -570,17 +738,44 @@ function renderScoringMethod() {
   const r = getRoundMeta();
   $("methodHeading").textContent = `${r.label || `${r.round}회`} 평가 방식`;
 
-  const rawText =
-    `Basic ${r.basicMax} + Technical ${r.technicalMax} + ` +
-    `Creativity ${r.creativityMax} + Impression ${r.impressionMax}`;
-
   const standardizedText = r.useStandardization
-    ? `${r.stdDev} 표준편차를 사용해 Judge별 점수를 표준화합니다.`
-    : "이 회차는 표준화를 적용하지 않고 Raw Score를 사용합니다.";
+    ? (
+        r.standardizationScope === "GROUP"
+          ? `각 Group 내부에서 Judge별 평균과 ${r.stdDev} 표준편차를 계산해 Raw Score를 표준화합니다.`
+          : `Round 전체 참가자 기준으로 Judge별 평균과 ${r.stdDev} 표준편차를 계산해 Raw Score를 표준화합니다.`
+      )
+    : "이 회차는 표준화를 적용하지 않고 Judge Raw Score를 사용합니다.";
 
   const trimText =
     `Highest ${r.trimHighest}개 / Lowest ${r.trimLowest}개 제외 후 ` +
     `${r.aggregation} 방식으로 최종점수를 계산합니다.`;
+
+  if (r.scoreInputMode === "BONUS_PENALTY") {
+    grid.innerHTML = `
+      ${methodCard(
+        "Judge Raw Score",
+        `각 심사위원은 기본 ${r.baseScore}점에서 Plus 0~75점을 더하고 Minus 점수를 감점합니다. 저장된 Raw Score를 최종 Judge 원점수로 사용합니다.`,
+        `Base ${r.baseScore} + Plus - Minus = Raw`
+      )}
+      ${methodCard(
+        "Standardization",
+        standardizedText,
+        r.useStandardization
+          ? "Z-Score = (Raw - Judge Mean) / Judge Standard Deviation"
+          : "Standardization = OFF"
+      )}
+      ${methodCard(
+        "Final Score",
+        trimText,
+        `Trim High ${r.trimHighest} · Trim Low ${r.trimLowest} · ${r.aggregation}`
+      )}
+    `;
+    return;
+  }
+
+  const rawText =
+    `Basic ${r.basicMax} + Technical ${r.technicalMax} + ` +
+    `Creativity ${r.creativityMax} + Impression ${r.impressionMax}`;
 
   grid.innerHTML = `
     ${methodCard("Raw Score", rawText, `Raw Score = ${r.rawMax} maximum`)}
@@ -658,12 +853,25 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
           ${scoreLabel}
         </div>
 
-        <div class="criterion-strip">
-          ${judgeCriterion("Basic", j.basic, roundMeta.basicMax)}
-          ${judgeCriterion("Technical", j.technical, roundMeta.technicalMax)}
-          ${judgeCriterion("Creativity", j.creativity, roundMeta.creativityMax)}
-          ${judgeCriterion("Impression", j.impression, roundMeta.impressionMax)}
-        </div>
+        ${
+          roundMeta.scoreInputMode === "BONUS_PENALTY"
+            ? `
+              <div class="criterion-strip criterion-strip--round13">
+                ${round13Criterion("Base", j.baseScore, "base")}
+                ${round13Criterion("Plus", j.bonus, "plus")}
+                ${round13Criterion("Minus", j.penalty, "minus")}
+                ${round13Criterion("Raw", j.rawScore, "raw")}
+              </div>
+            `
+            : `
+              <div class="criterion-strip">
+                ${judgeCriterion("Basic", j.basic, roundMeta.basicMax)}
+                ${judgeCriterion("Technical", j.technical, roundMeta.technicalMax)}
+                ${judgeCriterion("Creativity", j.creativity, roundMeta.creativityMax)}
+                ${judgeCriterion("Impression", j.impression, roundMeta.impressionMax)}
+              </div>
+            `
+        }
 
         ${
           j.comment
@@ -711,12 +919,25 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
         <div class="detail-score">${headlineScore}</div>
       </div>
 
-      <div class="category-grid">
-        ${categoryCard("Basic Skill", p.categoryAverages.basic, roundMeta.basicMax)}
-        ${categoryCard("Technical Skill", p.categoryAverages.technical, roundMeta.technicalMax)}
-        ${categoryCard("Creativity", p.categoryAverages.creativity, roundMeta.creativityMax)}
-        ${categoryCard("Judge's impression", p.categoryAverages.impression, roundMeta.impressionMax)}
-      </div>
+      ${
+        roundMeta.scoreInputMode === "BONUS_PENALTY"
+          ? `
+            <div class="category-grid">
+              ${round13SummaryCard("Base Score", roundMeta.baseScore, "base")}
+              ${round13SummaryCard("Avg Plus", averageJudgeValue(p.judges, "bonus"), "plus")}
+              ${round13SummaryCard("Avg Minus", averageJudgeValue(p.judges, "penalty"), "minus")}
+              ${round13SummaryCard("Avg Raw", averageJudgeValue(p.judges, "rawScore"), "raw")}
+            </div>
+          `
+          : `
+            <div class="category-grid">
+              ${categoryCard("Basic Skill", p.categoryAverages.basic, roundMeta.basicMax)}
+              ${categoryCard("Technical Skill", p.categoryAverages.technical, roundMeta.technicalMax)}
+              ${categoryCard("Creativity", p.categoryAverages.creativity, roundMeta.creativityMax)}
+              ${categoryCard("Judge's impression", p.categoryAverages.impression, roundMeta.impressionMax)}
+            </div>
+          `
+      }
 
       <p class="section-kicker judge-section-title">JUDGE SCORES & COMMENTS</p>
       <div class="judge-list">${judgeRows}</div>
@@ -788,6 +1009,40 @@ function categoryCard(label, score, max) {
       <strong>${number(score, 2)} <small>/ ${max}</small></strong>
     </div>
   `;
+}
+
+function round13SummaryCard(label, value, kind) {
+  return `
+    <div class="category-card round13-card round13-card--${kind}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${number(value, 2)}</strong>
+    </div>
+  `;
+}
+
+function round13Criterion(label, value, kind) {
+  const prefix =
+    kind === "plus"
+      ? "+"
+      : (kind === "minus" ? "−" : "");
+
+  return `
+    <div class="criterion-item criterion-item--${kind}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${prefix}${number(value, 1)}</strong>
+    </div>
+  `;
+}
+
+function averageJudgeValue(judges, key) {
+  const values = judges
+    .filter(j => j.available && j[key] !== null && j[key] !== undefined && j[key] !== "")
+    .map(j => Number(j[key]))
+    .filter(Number.isFinite);
+
+  if (!values.length) return null;
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function judgeCriterion(label, score, max) {
