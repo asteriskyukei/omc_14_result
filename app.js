@@ -817,7 +817,7 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
   const judgeRankingActive = selectedJudgeIndex !== null;
   const selectedJudge = judgeRankingActive ? p.judges[selectedJudgeIndex] : null;
 
-  const judgeRows = p.judges.map(j => {
+  const judgeRows = p.judges.map((j, judgeIndex) => {
     if (!j.available) {
       return `
         <section class="judge-entry judge-entry--unavailable">
@@ -833,11 +833,18 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
       ? `<div class="judge-z"><span>Z-Score</span><strong>${signed(j.zScore)}</strong></div>`
       : `<div class="judge-z"><span>Judge Score</span><strong>${number(j.rawScore, 1)}</strong></div>`;
 
+    const judgeGroupRank = getJudgeGroupRank(p, judgeIndex, roundMeta);
+
     return `
       <section class="judge-entry ${j.excluded ? "excluded" : ""}">
         <div class="judge-row">
           <div class="judge-name">
             <strong>${escapeHtml(j.name)}</strong>
+            ${
+              judgeGroupRank === null
+                ? ""
+                : `<span class="judge-group-rank">${escapeHtml(p.group)} #${judgeGroupRank}</span>`
+            }
             ${
               j.excluded
                 ? `<span class="excluded-badge ${
@@ -955,6 +962,49 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
   `;
 
   $("detailDialog").showModal();
+}
+
+function getJudgeGroupRank(participant, judgeIndex, roundMeta) {
+  const groupEntries = getRoundEntries().filter(entry =>
+    entry.group === participant.group &&
+    entry.judges[judgeIndex] &&
+    entry.judges[judgeIndex].available
+  );
+
+  const scoreOf = entry => {
+    const judge = entry.judges[judgeIndex];
+    return roundMeta.useStandardization
+      ? Number(judge.zScore)
+      : Number(judge.rawScore);
+  };
+
+  const sorted = groupEntries
+    .filter(entry => Number.isFinite(scoreOf(entry)))
+    .sort((a, b) => {
+      const difference = scoreOf(b) - scoreOf(a);
+      if (Math.abs(difference) >= 1e-12) return difference;
+      return String(a.no || "").localeCompare(
+        String(b.no || ""), undefined, { numeric: true }
+      );
+    });
+
+  let previousScore = null;
+  let previousRank = 0;
+
+  for (let index = 0; index < sorted.length; index++) {
+    const entry = sorted[index];
+    const score = scoreOf(entry);
+    const tied = previousScore !== null &&
+      Math.abs(score - previousScore) < 1e-12;
+    const currentRank = tied ? previousRank : index + 1;
+
+    if (entry === participant) return currentRank;
+
+    previousScore = score;
+    previousRank = currentRank;
+  }
+
+  return null;
 }
 
 function renderJudgeSubcategories(judge, roundMeta) {
