@@ -2,6 +2,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyQglWD4OAD15g20-I6Q4hc
 
 const state = {
   payload: null,
+  round: null,
   group: "ALL",
   judge: "OVERALL",
   query: "",
@@ -18,10 +19,19 @@ function loadResults() {
   window[callbackName] = payload => {
     try {
       if (!payload || payload.ok !== true) {
-        throw new Error(payload?.error || "API 응답 오류");
+        throw new Error(payload && payload.error ? payload.error : "API 응답 오류");
       }
 
       state.payload = payload;
+
+      const enabledRounds = payload.rounds
+        .filter(r => r.enabled)
+        .sort((a, b) => Number(b.round) - Number(a.round));
+
+      state.round = enabledRounds.length
+        ? String(enabledRounds[0].round)
+        : "ALL_TIME";
+
       render();
       $("loading").classList.add("hidden");
     } catch (err) {
@@ -42,27 +52,103 @@ function loadResults() {
 }
 
 function render() {
-  const { meta, participants } = state.payload;
+  const meta = state.payload.meta;
 
   document.title = meta.eventTitle || "Judging Results";
   $("eventTitle").textContent = meta.eventTitle || "Judging Results";
   $("eventSubtitle").textContent = meta.eventSubtitle || "Official judging results";
-  $("judgeCount").textContent = meta.judges.length;
-  $("participantCount").textContent = participants.length;
   $("updatedAt").textContent = meta.generatedAt
     ? `Updated ${new Date(meta.generatedAt).toLocaleString()}`
     : "";
 
+  renderRoundFilters();
+
+  if (state.round === "ALL_TIME") {
+    renderAllTimeMode();
+  } else {
+    renderRoundMode();
+  }
+
+  renderScoringMethod();
+}
+
+function getRoundMeta() {
+  return state.payload.rounds.find(
+    r => String(r.round) === String(state.round)
+  ) || null;
+}
+
+function getRoundEntries() {
+  return state.payload.entries.filter(
+    e => String(e.round) === String(state.round)
+  );
+}
+
+function renderRoundFilters() {
+  const container = $("roundFilters");
+  container.innerHTML = "";
+
+  const items = [
+    { value: "ALL_TIME", label: "All-Time" },
+    ...state.payload.rounds
+      .filter(r => r.enabled)
+      .sort((a, b) => Number(b.round) - Number(a.round))
+      .map(r => ({
+        value: String(r.round),
+        label: r.label || `${r.round}회`
+      }))
+  ];
+
+  items.forEach(item => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = item.label;
+    button.className = state.round === item.value ? "active" : "";
+
+    button.onclick = () => {
+      state.round = item.value;
+      state.group = "ALL";
+      state.judge = "OVERALL";
+      state.sortKey = "rank";
+      state.sortDir = "asc";
+      render();
+    };
+
+    container.appendChild(button);
+  });
+}
+
+function renderRoundMode() {
+  $("groupFilterRow").hidden = false;
+  $("judgeFilterRow").hidden = false;
+
   renderGroups();
   renderJudgeFilters();
-  renderTable();
+  renderRoundTable();
+}
+
+function renderAllTimeMode() {
+  $("groupFilterRow").hidden = true;
+  $("judgeFilterRow").hidden = true;
+
+  const standings = state.payload.allTime || [];
+
+  $("summaryLabel1").textContent = "Participants";
+  $("summaryValue1").textContent = standings.length;
+
+  $("summaryLabel2").textContent = "Rounds";
+  $("summaryValue2").textContent = state.payload.rounds.filter(r => r.enabled).length;
+
+  $("summaryLabel3").textContent = "Ranking";
+  $("summaryValue3").textContent = "Wins";
+
+  $("rankingTitle").textContent = "All-Time Standings";
+  renderAllTimeTable();
 }
 
 function renderGroups() {
-  const groups = [...new Set(
-    state.payload.participants.map(p => p.group).filter(Boolean)
-  )];
-
+  const entries = getRoundEntries();
+  const groups = [...new Set(entries.map(p => p.group).filter(Boolean))];
   const container = $("groupFilters");
   container.innerHTML = "";
 
@@ -77,7 +163,7 @@ function renderGroups() {
       state.sortKey = "rank";
       state.sortDir = "asc";
       renderGroups();
-      renderTable();
+      renderRoundTable();
     };
 
     container.appendChild(button);
@@ -85,12 +171,13 @@ function renderGroups() {
 }
 
 function renderJudgeFilters() {
+  const roundMeta = getRoundMeta();
   const container = $("judgeFilters");
   container.innerHTML = "";
 
   const items = [
     { value: "OVERALL", label: "Overall" },
-    ...state.payload.meta.judges.map((name, index) => ({
+    ...roundMeta.judges.map((name, index) => ({
       value: String(index),
       label: name
     }))
@@ -107,23 +194,39 @@ function renderJudgeFilters() {
       state.sortKey = "rank";
       state.sortDir = "asc";
       renderJudgeFilters();
-      renderTable();
+      renderRoundTable();
     };
 
     container.appendChild(button);
   });
 }
 
-function getGroupParticipants() {
-  return state.group === "ALL"
-    ? [...state.payload.participants]
-    : state.payload.participants.filter(p => p.group === state.group);
+function getFilteredRoundEntries() {
+  let entries = getRoundEntries();
+
+  if (state.group !== "ALL") {
+    entries = entries.filter(p => p.group === state.group);
+  }
+
+  return entries;
 }
 
-function buildJudgeRanking(participants, judgeIndex) {
-  const sorted = [...participants].sort((a, b) => {
-    const aScore = Number(a.judges[judgeIndex].zScore);
-    const bScore = Number(b.judges[judgeIndex].zScore);
+function buildJudgeRanking(participants, judgeIndex, useStandardization) {
+  const available = participants.filter(
+    p => p.judges[judgeIndex] && p.judges[judgeIndex].available
+  );
+
+  const sorted = [...available].sort((a, b) => {
+    const aJudge = a.judges[judgeIndex];
+    const bJudge = b.judges[judgeIndex];
+
+    const aScore = useStandardization
+      ? Number(aJudge.zScore)
+      : Number(aJudge.rawScore);
+
+    const bScore = useStandardization
+      ? Number(bJudge.zScore)
+      : Number(bJudge.rawScore);
 
     if (bScore !== aScore) return bScore - aScore;
 
@@ -139,7 +242,11 @@ function buildJudgeRanking(participants, judgeIndex) {
   let previousRank = 0;
 
   sorted.forEach((p, index) => {
-    const score = Number(p.judges[judgeIndex].zScore);
+    const judge = p.judges[judgeIndex];
+    const score = useStandardization
+      ? Number(judge.zScore)
+      : Number(judge.rawScore);
+
     const sameScore =
       previousScore !== null &&
       Math.abs(score - previousScore) < 1e-12;
@@ -154,21 +261,280 @@ function buildJudgeRanking(participants, judgeIndex) {
   return rankMap;
 }
 
-function compareValues(a, b, numeric = false) {
-  if (numeric) {
-    const av = Number(a);
-    const bv = Number(b);
+function renderRoundTable() {
+  const roundMeta = getRoundMeta();
+  const participants = getFilteredRoundEntries();
+  let rows = [...participants];
 
-    if (av < bv) return -1;
-    if (av > bv) return 1;
-    return 0;
+  const isJudgeRanking = state.judge !== "OVERALL";
+  const judgeIndex = isJudgeRanking ? Number(state.judge) : null;
+
+  const judgeRankMap = isJudgeRanking
+    ? buildJudgeRanking(participants, judgeIndex, roundMeta.useStandardization)
+    : null;
+
+  if (isJudgeRanking) {
+    rows = rows.filter(p => judgeRankMap.has(p));
   }
 
-  return String(a ?? "").localeCompare(
-    String(b ?? ""),
-    undefined,
-    { numeric: true, sensitivity: "base" }
-  );
+  if (state.query) {
+    const q = state.query.toLowerCase();
+
+    rows = rows.filter(p =>
+      [p.username, p.track, p.no, p.group, p.participantId]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
+  $("summaryLabel1").textContent = "Participants";
+  $("summaryValue1").textContent = participants.length;
+
+  $("summaryLabel2").textContent = "Judges";
+  $("summaryValue2").textContent = roundMeta.judgeCount;
+
+  $("summaryLabel3").textContent = "Scoring";
+  $("summaryValue3").textContent = roundMeta.useStandardization ? "Z-Score" : "Raw";
+
+  const roundLabel = roundMeta.label || `${roundMeta.round}회`;
+
+  if (isJudgeRanking) {
+    $("rankingTitle").textContent =
+      `${roundLabel} · ${roundMeta.judges[judgeIndex]} Ranking`;
+  } else {
+    $("rankingTitle").textContent =
+      state.group === "ALL"
+        ? `${roundLabel} Final Results`
+        : `${roundLabel} · ${state.group} Results`;
+  }
+
+  renderRoundHeader(isJudgeRanking, roundMeta);
+
+  const getRank = p =>
+    isJudgeRanking
+      ? judgeRankMap.get(p)
+      : (state.group === "ALL" ? p.overallRank : p.groupRank);
+
+  const getScore = p => {
+    if (!isJudgeRanking) return Number(p.finalScore);
+
+    const judge = p.judges[judgeIndex];
+
+    return roundMeta.useStandardization
+      ? Number(judge.zScore)
+      : Number(judge.rawScore);
+  };
+
+  const accessors = {
+    rank: p => getRank(p),
+    no: p => p.no || "",
+    username: p => p.username || "",
+    track: p => p.track || "",
+    score: p => getScore(p)
+  };
+
+  const numericKeys = new Set(["rank", "score"]);
+
+  rows.sort((a, b) => {
+    const result = compareValues(
+      accessors[state.sortKey](a),
+      accessors[state.sortKey](b),
+      numericKeys.has(state.sortKey)
+    );
+
+    if (result !== 0) {
+      return state.sortDir === "asc" ? result : -result;
+    }
+
+    return compareValues(getRank(a), getRank(b), true);
+  });
+
+  const body = $("resultsBody");
+  body.innerHTML = "";
+
+  rows.forEach(p => {
+    const rank = getRank(p);
+    let scoreCell = "";
+
+    if (isJudgeRanking) {
+      const judge = p.judges[judgeIndex];
+
+      if (roundMeta.useStandardization) {
+        scoreCell = `
+          <div class="judge-ranking-score">${signed(judge.zScore)}</div>
+          <div class="meta">Raw ${number(judge.rawScore, 1)} / ${number(roundMeta.rawMax, 0)}</div>
+        `;
+      } else {
+        scoreCell = `
+          <div class="judge-ranking-score">${number(judge.rawScore, 1)}</div>
+          <div class="meta">Raw Score / ${number(roundMeta.rawMax, 0)}</div>
+        `;
+      }
+    } else {
+      scoreCell = formatScore(p.finalScore);
+    }
+
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td><span class="rank-badge ${rank <= 3 ? "top" : ""}">${rank}</span></td>
+      <td class="meta">${escapeHtml(p.no || "-")}</td>
+      <td>
+        <div class="participant-name">${escapeHtml(p.username)}</div>
+        ${p.group ? `<div class="meta">${escapeHtml(p.group)}</div>` : ""}
+      </td>
+      <td class="meta">${escapeHtml(p.track || "-")}</td>
+      <td class="score">${scoreCell}</td>
+    `;
+
+    tr.onclick = () => showRoundDetail(p, rank, judgeIndex);
+    body.appendChild(tr);
+  });
+
+  $("emptyState").hidden = rows.length !== 0;
+  bindSortButtons(renderRoundTable);
+  updateSortIndicators();
+}
+
+function renderRoundHeader(isJudgeRanking, roundMeta) {
+  const scoreLabel = isJudgeRanking
+    ? (
+        roundMeta.useStandardization
+          ? `${roundMeta.judges[Number(state.judge)]} Z-Score`
+          : `${roundMeta.judges[Number(state.judge)]} Raw Score`
+      )
+    : "Final Score";
+
+  $("resultsHead").innerHTML = `
+    <tr>
+      ${sortableTh("Rank", "rank")}
+      ${sortableTh("No.", "no")}
+      ${sortableTh("Participant", "username")}
+      ${sortableTh("Track", "track")}
+      ${sortableTh(scoreLabel, "score")}
+    </tr>
+  `;
+}
+
+function renderAllTimeTable() {
+  let rows = [...(state.payload.allTime || [])];
+
+  if (state.query) {
+    const q = state.query.toLowerCase();
+
+    rows = rows.filter(p =>
+      [p.username, p.participantId]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
+  const accessors = {
+    rank: p => p.rank,
+    username: p => p.username,
+    wins: p => p.wins,
+    seconds: p => p.seconds,
+    thirds: p => p.thirds,
+    podiums: p => p.podiums,
+    appearances: p => p.appearances,
+    averageRank: p => p.averageRank
+  };
+
+  const numericKeys = new Set([
+    "rank", "wins", "seconds", "thirds",
+    "podiums", "appearances", "averageRank"
+  ]);
+
+  rows.sort((a, b) => {
+    const accessor = accessors[state.sortKey] || accessors.rank;
+
+    const result = compareValues(
+      accessor(a),
+      accessor(b),
+      numericKeys.has(state.sortKey)
+    );
+
+    if (result !== 0) {
+      return state.sortDir === "asc" ? result : -result;
+    }
+
+    return compareValues(a.rank, b.rank, true);
+  });
+
+  $("resultsHead").innerHTML = `
+    <tr>
+      ${sortableTh("Rank", "rank")}
+      ${sortableTh("Participant", "username")}
+      ${sortableTh("Wins", "wins")}
+      ${sortableTh("2nd", "seconds")}
+      ${sortableTh("3rd", "thirds")}
+      ${sortableTh("Podiums", "podiums")}
+      ${sortableTh("Appearances", "appearances")}
+      ${sortableTh("Avg Rank", "averageRank")}
+    </tr>
+  `;
+
+  const body = $("resultsBody");
+  body.innerHTML = "";
+
+  rows.forEach(p => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td><span class="rank-badge ${p.rank <= 3 ? "top" : ""}">${p.rank}</span></td>
+      <td>
+        <div class="participant-name">${escapeHtml(p.username)}</div>
+        <div class="meta">${escapeHtml(p.participantId)}</div>
+      </td>
+      <td class="stat-number stat-win">${p.wins}</td>
+      <td class="stat-number">${p.seconds}</td>
+      <td class="stat-number">${p.thirds}</td>
+      <td class="stat-number">${p.podiums}</td>
+      <td class="stat-number">${p.appearances}</td>
+      <td class="stat-number">${number(p.averageRank, 2)}</td>
+    `;
+
+    tr.onclick = () => showAllTimeDetail(p);
+    body.appendChild(tr);
+  });
+
+  $("emptyState").hidden = rows.length !== 0;
+  bindSortButtons(renderAllTimeTable);
+  updateSortIndicators();
+}
+
+function sortableTh(label, key) {
+  return `
+    <th>
+      <button class="sort-button" type="button" data-sort="${key}">
+        ${escapeHtml(label)}
+        <span class="sort-indicator"></span>
+      </button>
+    </th>
+  `;
+}
+
+function bindSortButtons(renderFn) {
+  document.querySelectorAll(".sort-button").forEach(button => {
+    button.onclick = () => {
+      const key = button.dataset.sort;
+
+      if (state.sortKey === key) {
+        state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        state.sortKey = key;
+
+        state.sortDir = [
+          "score", "wins", "seconds", "thirds",
+          "podiums", "appearances"
+        ].includes(key) ? "desc" : "asc";
+      }
+
+      renderFn();
+    };
+  });
 }
 
 function updateSortIndicators() {
@@ -186,159 +552,83 @@ function updateSortIndicators() {
   });
 }
 
-function renderTable() {
-  const groupParticipants = getGroupParticipants();
-  let rows = [...groupParticipants];
+function renderScoringMethod() {
+  const grid = $("methodGrid");
+  grid.innerHTML = "";
 
-  const isJudgeRanking = state.judge !== "OVERALL";
-  const judgeIndex = isJudgeRanking ? Number(state.judge) : null;
-  let judgeRankMap = null;
+  if (state.round === "ALL_TIME") {
+    $("methodHeading").textContent = "전회차 종합 순위 기준";
 
-  if (isJudgeRanking) {
-    judgeRankMap = buildJudgeRanking(groupParticipants, judgeIndex);
-  }
-
-  if (state.query) {
-    const q = state.query.toLowerCase();
-
-    rows = rows.filter(p =>
-      [p.username, p.track, p.no, p.group]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }
-
-  $("participantCount").textContent = groupParticipants.length;
-
-  const groupLabel = state.group === "ALL" ? "All" : state.group;
-
-  if (isJudgeRanking) {
-    const judgeName = state.payload.meta.judges[judgeIndex];
-    $("rankingTitle").textContent = `${judgeName} Ranking · ${groupLabel}`;
-    $("scoreHeaderLabel").textContent = `${judgeName} Z-Score`;
-  } else {
-    $("rankingTitle").textContent =
-      state.group === "ALL"
-        ? "Final Results"
-        : `${state.group} Results`;
-
-    $("scoreHeaderLabel").textContent = "Final Score";
-  }
-
-  const getRank = p =>
-    isJudgeRanking
-      ? judgeRankMap.get(p)
-      : (state.group === "ALL" ? p.overallRank : p.groupRank);
-
-  const getScore = p =>
-    isJudgeRanking
-      ? Number(p.judges[judgeIndex].zScore)
-      : Number(p.finalScore);
-
-  const accessors = {
-    rank: p => getRank(p),
-    no: p => p.no || "",
-    username: p => p.username || "",
-    track: p => p.track || "",
-    score: p => getScore(p)
-  };
-
-  const numericKeys = new Set(["rank", "score"]);
-
-  rows.sort((a, b) => {
-    const av = accessors[state.sortKey](a);
-    const bv = accessors[state.sortKey](b);
-
-    const result = compareValues(
-      av,
-      bv,
-      numericKeys.has(state.sortKey)
-    );
-
-    if (result !== 0) {
-      return state.sortDir === "asc" ? result : -result;
-    }
-
-    const rankResult = compareValues(getRank(a), getRank(b), true);
-    if (rankResult !== 0) return rankResult;
-
-    return compareValues(a.no || "", b.no || "");
-  });
-
-  const body = $("resultsBody");
-  body.innerHTML = "";
-
-  rows.forEach(p => {
-    const rank = getRank(p);
-    let scoreCell = "";
-
-    if (isJudgeRanking) {
-      const judge = p.judges[judgeIndex];
-
-      scoreCell = `
-        <div class="judge-ranking-score">${signed(judge.zScore)}</div>
-        <div class="meta">Raw ${Number(judge.rawScore).toFixed(1)} / 100</div>
-      `;
-    } else {
-      scoreCell = formatScore(p.finalScore);
-    }
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>
-        <span class="rank-badge ${rank <= 3 ? "top" : ""}">${rank}</span>
-      </td>
-      <td class="meta">${escapeHtml(p.no || "-")}</td>
-      <td>
-        <div class="participant-name">${escapeHtml(p.username)}</div>
-        ${p.group ? `<div class="meta">${escapeHtml(p.group)}</div>` : ""}
-      </td>
-      <td class="meta">${escapeHtml(p.track || "-")}</td>
-      <td class="score">${scoreCell}</td>
+    grid.innerHTML = `
+      ${methodCard("Primary", "1위 횟수가 많은 참가자를 우선합니다.", "Wins: descending")}
+      ${methodCard("Tie-break", "1위 횟수가 같으면 2위 횟수 → 3위 횟수 → 포디움 횟수 순으로 비교합니다.", "2nd → 3rd → Podiums")}
+      ${methodCard("Final Tie-break", "여전히 같으면 평균 순위가 더 높은 참가자를 우선합니다.", "Average Rank: ascending")}
     `;
+    return;
+  }
 
-    tr.onclick = () => showDetail(p, rank, judgeIndex);
-    body.appendChild(tr);
-  });
+  const r = getRoundMeta();
+  $("methodHeading").textContent = `${r.label || `${r.round}회`} 평가 방식`;
 
-  $("emptyState").hidden = rows.length !== 0;
-  updateSortIndicators();
+  const rawText =
+    `Basic ${r.basicMax} + Technical ${r.technicalMax} + ` +
+    `Creativity ${r.creativityMax} + Impression ${r.impressionMax}`;
+
+  const standardizedText = r.useStandardization
+    ? `${r.stdDev} 표준편차를 사용해 Judge별 점수를 표준화합니다.`
+    : "이 회차는 표준화를 적용하지 않고 Raw Score를 사용합니다.";
+
+  const trimText =
+    `Highest ${r.trimHighest}개 / Lowest ${r.trimLowest}개 제외 후 ` +
+    `${r.aggregation} 방식으로 최종점수를 계산합니다.`;
+
+  grid.innerHTML = `
+    ${methodCard("Raw Score", rawText, `Raw Score = ${r.rawMax} maximum`)}
+    ${methodCard(
+      "Standardization",
+      standardizedText,
+      r.useStandardization
+        ? "Z-Score = (Raw - Judge Mean) / Judge Standard Deviation"
+        : "Standardization = OFF"
+    )}
+    ${methodCard(
+      "Final Score",
+      trimText,
+      `Trim High ${r.trimHighest} · Trim Low ${r.trimLowest} · ${r.aggregation}`
+    )}
+  `;
 }
 
-function hasJudgeCriteria(judge) {
-  return [
-    judge.basic,
-    judge.technical,
-    judge.creativity,
-    judge.impression
-  ].every(value =>
-    value !== undefined &&
-    value !== null &&
-    value !== "" &&
-    Number.isFinite(Number(value))
-  );
+function methodCard(title, text, code) {
+  return `
+    <article>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+      <code>${escapeHtml(code)}</code>
+    </article>
+  `;
 }
 
-function showDetail(p, rank, selectedJudgeIndex = null) {
-  const missingCriteria = p.judges.some(j => !hasJudgeCriteria(j));
+function showRoundDetail(p, rank, selectedJudgeIndex) {
+  const roundMeta = getRoundMeta();
+  const judgeRankingActive = selectedJudgeIndex !== null;
+  const selectedJudge = judgeRankingActive ? p.judges[selectedJudgeIndex] : null;
 
   const judgeRows = p.judges.map(j => {
-    const criteriaHtml = hasJudgeCriteria(j)
-      ? `
-        <div class="criterion-strip">
-          ${judgeCriterion("Basic", j.basic, 20)}
-          ${judgeCriterion("Technical", j.technical, 30)}
-          ${judgeCriterion("Creativity", j.creativity, 25)}
-          ${judgeCriterion("Impression", j.impression, 25)}
-        </div>
-      `
-      : `
-        <div class="criterion-unavailable">
-          세부 심사점수가 API 응답에 없습니다.
-        </div>
+    if (!j.available) {
+      return `
+        <section class="judge-entry judge-entry--unavailable">
+          <div class="judge-row judge-row--unavailable">
+            <div class="judge-name"><strong>${escapeHtml(j.name)}</strong></div>
+            <div class="meta">세부 심사 데이터 없음</div>
+          </div>
+        </section>
       `;
+    }
+
+    const scoreLabel = roundMeta.useStandardization
+      ? `<div class="judge-z"><span>Z-Score</span><strong>${signed(j.zScore)}</strong></div>`
+      : `<div class="judge-z"><span>Judge Score</span><strong>${number(j.rawScore, 1)}</strong></div>`;
 
     return `
       <section class="judge-entry ${j.excluded ? "excluded" : ""}">
@@ -351,29 +641,29 @@ function showDetail(p, rank, selectedJudgeIndex = null) {
                     j.excludedReason === "highest"
                       ? "excluded-highest"
                       : "excluded-lowest"
-                  }">
-                    ${
-                      j.excludedReason === "highest"
-                        ? "Highest · Excluded"
-                        : "Lowest · Excluded"
-                    }
-                  </span>`
+                  }">${
+                    j.excludedReason === "highest"
+                      ? "Highest · Excluded"
+                      : "Lowest · Excluded"
+                  }</span>`
                 : ""
             }
           </div>
 
           <div class="judge-total">
             <span>Raw</span>
-            <strong>${Number(j.rawScore).toFixed(1)} / 100</strong>
+            <strong>${number(j.rawScore, 1)} / ${number(roundMeta.rawMax, 0)}</strong>
           </div>
 
-          <div class="judge-z">
-            <span>Z-Score</span>
-            <strong>${signed(j.zScore)}</strong>
-          </div>
+          ${scoreLabel}
         </div>
 
-        ${criteriaHtml}
+        <div class="criterion-strip">
+          ${judgeCriterion("Basic", j.basic, roundMeta.basicMax)}
+          ${judgeCriterion("Technical", j.technical, roundMeta.technicalMax)}
+          ${judgeCriterion("Creativity", j.creativity, roundMeta.creativityMax)}
+          ${judgeCriterion("Impression", j.impression, roundMeta.impressionMax)}
+        </div>
 
         ${
           j.comment
@@ -389,51 +679,31 @@ function showDetail(p, rank, selectedJudgeIndex = null) {
     `;
   }).join("");
 
-  const judgeRankingActive = selectedJudgeIndex !== null;
-  const selectedJudge = judgeRankingActive
-    ? p.judges[selectedJudgeIndex]
-    : null;
-
-  const rankingLabel = judgeRankingActive
-    ? `${selectedJudge.name} RANK #${rank}`
-    : `RANK #${rank}`;
-
-  const headlineScore = judgeRankingActive
-    ? `${signed(selectedJudge.zScore)} <small>Z</small>`
+  const headlineScore = judgeRankingActive && selectedJudge && selectedJudge.available
+    ? (
+        roundMeta.useStandardization
+          ? `${signed(selectedJudge.zScore)} <small>Z</small>`
+          : `${number(selectedJudge.rawScore, 1)} <small>Raw</small>`
+      )
     : formatScore(p.finalScore);
-
-  const apiWarning = missingCriteria
-    ? `
-      <div class="api-warning">
-        현재 배포된 Apps Script API가 세부 심사점수를 반환하지 않고 있습니다.
-        v7의 <strong>Code.gs</strong>로 교체한 뒤
-        <strong>배포 관리 → 수정 → 새 버전</strong>으로 재배포하면 실제 점수가 표시됩니다.
-      </div>
-    `
-    : "";
 
   $("detailContent").innerHTML = `
     <div class="detail-inner">
       <div class="detail-title-row">
         <div>
-          <p class="section-kicker">${escapeHtml(rankingLabel)}</p>
+          <p class="section-kicker">
+            ${escapeHtml(roundMeta.label || `${roundMeta.round}회`)} · RANK #${rank}
+          </p>
           <h2>${escapeHtml(p.username)}</h2>
           <p class="detail-sub">
-            ${
-              [
-                p.group,
-                p.no ? `No. ${p.no}` : "",
-                p.track
-              ]
-                .filter(Boolean)
-                .map(escapeHtml)
-                .join(" · ")
-            }
+            ${[p.group, p.no ? `No. ${p.no}` : "", p.track]
+              .filter(Boolean)
+              .map(escapeHtml)
+              .join(" · ")}
           </p>
-
           ${
-            judgeRankingActive
-              ? `<p class="detail-sub">Raw Score ${Number(selectedJudge.rawScore).toFixed(1)} / 100</p>`
+            p.calculationSource === "override"
+              ? `<p class="detail-sub">Historical Final Score Override</p>`
               : ""
           }
         </div>
@@ -442,13 +712,11 @@ function showDetail(p, rank, selectedJudgeIndex = null) {
       </div>
 
       <div class="category-grid">
-        ${categoryCard("Basic Skill", p.categoryAverages.basic, 20)}
-        ${categoryCard("Technical Skill", p.categoryAverages.technical, 30)}
-        ${categoryCard("Creativity", p.categoryAverages.creativity, 25)}
-        ${categoryCard("Judge's impression", p.categoryAverages.impression, 25)}
+        ${categoryCard("Basic Skill", p.categoryAverages.basic, roundMeta.basicMax)}
+        ${categoryCard("Technical Skill", p.categoryAverages.technical, roundMeta.technicalMax)}
+        ${categoryCard("Creativity", p.categoryAverages.creativity, roundMeta.creativityMax)}
+        ${categoryCard("Judge's impression", p.categoryAverages.impression, roundMeta.impressionMax)}
       </div>
-
-      ${apiWarning}
 
       <p class="section-kicker judge-section-title">JUDGE SCORES & COMMENTS</p>
       <div class="judge-list">${judgeRows}</div>
@@ -458,53 +726,119 @@ function showDetail(p, rank, selectedJudgeIndex = null) {
   $("detailDialog").showModal();
 }
 
-function categoryCard(label, score, max) {
-  const value = Number(score);
+function showAllTimeDetail(p) {
+  const history = [...p.history].sort(
+    (a, b) => Number(b.round) - Number(a.round)
+  );
 
+  $("detailContent").innerHTML = `
+    <div class="detail-inner">
+      <div class="detail-title-row">
+        <div>
+          <p class="section-kicker">ALL-TIME RANK #${p.rank}</p>
+          <h2>${escapeHtml(p.username)}</h2>
+          <p class="detail-sub">${escapeHtml(p.participantId)}</p>
+        </div>
+
+        <div class="detail-score">${p.wins}<small> Wins</small></div>
+      </div>
+
+      <div class="alltime-stats">
+        ${statCard("Wins", p.wins)}
+        ${statCard("2nd", p.seconds)}
+        ${statCard("3rd", p.thirds)}
+        ${statCard("Podiums", p.podiums)}
+        ${statCard("Appearances", p.appearances)}
+        ${statCard("Avg Rank", number(p.averageRank, 2))}
+      </div>
+
+      <p class="section-kicker judge-section-title">ROUND HISTORY</p>
+
+      <div class="history-list">
+        ${history.map(h => `
+          <div class="history-row">
+            <div>
+              <strong>${escapeHtml(h.label || `${h.round}회`)}</strong>
+              <span>${escapeHtml(h.group || "")}</span>
+            </div>
+            <div class="history-rank">#${h.rank}</div>
+            <div class="history-score">${number(h.finalScore, 3)}</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  $("detailDialog").showModal();
+}
+
+function statCard(label, value) {
+  return `
+    <div class="stat-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function categoryCard(label, score, max) {
   return `
     <div class="category-card">
       <span>${escapeHtml(label)}</span>
-      <strong>
-        ${Number.isFinite(value) ? value.toFixed(2) : "—"}
-        <small>/ ${max}</small>
-      </strong>
+      <strong>${number(score, 2)} <small>/ ${max}</small></strong>
     </div>
   `;
 }
 
 function judgeCriterion(label, score, max) {
-  const value = Number(score);
-
   return `
     <div class="criterion-item">
       <span>${escapeHtml(label)}</span>
-      <strong>
-        ${Number.isFinite(value) ? value.toFixed(1) : "—"}
-        <small>/ ${max}</small>
-      </strong>
+      <strong>${number(score, 1)} <small>/ ${max}</small></strong>
     </div>
   `;
 }
 
-function formatScore(n) {
-  const value = Number(n);
+function compareValues(a, b, numeric) {
+  if (numeric) {
+    const av = Number(a);
+    const bv = Number(b);
 
-  return Number.isFinite(value)
-    ? value.toFixed(state.payload?.meta?.scorePrecision ?? 3)
-    : "—";
+    if (av < bv) return -1;
+    if (av > bv) return 1;
+    return 0;
+  }
+
+  return String(a || "").localeCompare(
+    String(b || ""),
+    undefined,
+    { numeric: true, sensitivity: "base" }
+  );
 }
 
-function signed(n) {
-  const value = Number(n);
-  const precision = state.payload?.meta?.scorePrecision ?? 3;
+function formatScore(value) {
+  return number(value, state.payload.meta.scorePrecision || 3);
+}
 
-  if (!Number.isFinite(value)) return "—";
+function number(value, digits) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : "—";
+}
 
-  return `${value > 0 ? "+" : ""}${value.toFixed(precision)}`;
+function signed(value) {
+  if (value === null || value === undefined || value === "") return "—";
+
+  const n = Number(value);
+  const precision = state.payload.meta.scorePrecision || 3;
+
+  if (!Number.isFinite(n)) return "—";
+
+  return `${n > 0 ? "+" : ""}${n.toFixed(precision)}`;
 }
 
 function escapeHtml(value) {
-  return String(value ?? "")
+  return String(value == null ? "" : value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -523,7 +857,14 @@ function showFatal(message) {
 
 $("searchInput").addEventListener("input", event => {
   state.query = event.target.value.trim();
-  if (state.payload) renderTable();
+
+  if (!state.payload) return;
+
+  if (state.round === "ALL_TIME") {
+    renderAllTimeTable();
+  } else {
+    renderRoundTable();
+  }
 });
 
 $("dialogClose").addEventListener("click", () => $("detailDialog").close());
@@ -532,21 +873,6 @@ $("detailDialog").addEventListener("click", event => {
   if (event.target === $("detailDialog")) {
     $("detailDialog").close();
   }
-});
-
-document.querySelectorAll(".sort-button").forEach(button => {
-  button.addEventListener("click", () => {
-    const key = button.dataset.sort;
-
-    if (state.sortKey === key) {
-      state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-    } else {
-      state.sortKey = key;
-      state.sortDir = key === "score" ? "desc" : "asc";
-    }
-
-    if (state.payload) renderTable();
-  });
 });
 
 loadResults();
