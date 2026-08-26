@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbxr8Y_47Vj8Z5tU9zl2VzF7n_uIJTq9hiFw16U0Mv4UEbQ6LMKlHR6wmQUF3pd0HSDb5g/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwm7_j4kcP3iqgV7EACIHMswWB7rArzUoJX50X-95tHgz--G-q95slswkC9mCQR4iarBA/exec";
 
 const state = {
   payload: null,
@@ -633,6 +633,11 @@ function renderSubcategoryAwards() {
       ? "Judge scores summed · Final Score와 별도"
       : "Judge scores averaged · Final Score와 별도";
 
+  if (aggregation === "RANK_BONUS_10_5_2") {
+    $("subcategoryMethod").textContent =
+      "Judge별 순위 보너스 10 / 5 / 2점 합산 · Final Score와 별도";
+  }
+
   grid.innerHTML = roundMeta.subcategories
     .map(category => {
       const ranking = participants
@@ -873,6 +878,8 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
             `
         }
 
+        ${renderJudgeSubcategories(j, roundMeta)}
+
         ${
           j.comment
             ? `
@@ -945,6 +952,39 @@ function showRoundDetail(p, rank, selectedJudgeIndex) {
   `;
 
   $("detailDialog").showModal();
+}
+
+function renderJudgeSubcategories(judge, roundMeta) {
+  if (
+    !roundMeta.enableSubcategories ||
+    !roundMeta.subcategories ||
+    !roundMeta.subcategories.length
+  ) {
+    return "";
+  }
+
+  const raw = judge.subcategoryScores || {};
+  const zScores = judge.subcategoryZScores || {};
+  const items = roundMeta.subcategories
+    .map(category => {
+      const rawValue = Number(raw[category.key]);
+      const zValue = Number(zScores[category.key]);
+
+      if (!Number.isFinite(rawValue)) return "";
+
+      return `
+        <div class="criterion-item">
+          <span>${escapeHtml(category.label)}</span>
+          <strong>${number(rawValue, 1)}</strong>
+          <small>Z ${Number.isFinite(zValue) ? signed(zValue) : "-"}</small>
+        </div>
+      `;
+    })
+    .join("");
+
+  return items
+    ? `<div class="criterion-strip criterion-strip--subcategories">${items}</div>`
+    : "";
 }
 
 function showAllTimeDetail(p) {
