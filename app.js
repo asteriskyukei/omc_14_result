@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbwm7_j4kcP3iqgV7EACIHMswWB7rArzUoJX50X-95tHgz--G-q95slswkC9mCQR4iarBA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxCtJTlknz0RqldWKuSitftN-x2V3gLHR6CXuEnW0t3qtOhgP5KOs_E8p4I0nNch9h3Lw/exec";
 
 const state = {
   payload: null,
@@ -624,7 +624,9 @@ function renderSubcategoryAwards() {
 
   section.hidden = false;
 
-  const participants = getFilteredRoundEntries();
+  // Special awards are round-wide and independent from the main table's
+  // Generic / Tech filter.
+  const participants = getRoundEntries();
   const grid = $("subcategoryGrid");
   const aggregation = roundMeta.subcategoryAggregation || "AVERAGE";
 
